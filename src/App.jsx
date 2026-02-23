@@ -1,34 +1,100 @@
-import { useState } from 'react'
-import reactLogo from './assets/react.svg'
-import viteLogo from '/vite.svg'
-import './App.css'
+import { useState, useEffect } from "react"
+import { getCandidateByEmail, getJobList, applyToJob } from "./api/api"
+import JobList from "./components/JobList"
+import "./App.css"
+import { CANDIDATE_EMAIL } from "./api/config"
 
 function App() {
-  const [count, setCount] = useState(0)
+  const [candidate, setCandidate] = useState(null)
+  const [jobs, setJobs] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(null)
+  const [submittingJobId, setSubmittingJobId] = useState(null)
+  const [submitMessage, setSubmitMessage] = useState(null)
+  const [submitError, setSubmitError] = useState(null)
+  const email = CANDIDATE_EMAIL
+
+  useEffect(() => {
+    const controller = new AbortController()
+
+    const fetchData = async () => {
+      try {
+        setLoading(true)
+        setError(null)
+
+        const [candidateData, jobsData] = await Promise.all([
+          getCandidateByEmail(email, controller.signal),
+          getJobList(controller.signal),
+        ])
+
+        setCandidate(candidateData)
+        setJobs(jobsData)
+      } catch (err) {
+        if (err?.name === "AbortError") return
+        setError(err)
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    fetchData()
+    return () => controller.abort()
+  }, [email])
+
+  const handleApply = async (jobId, repoUrl) => {
+    if (!candidate) {
+      setSubmitError(new Error("Candidate data not loaded yet"))
+      return
+    }
+
+    if (!repoUrl || !repoUrl.trim()) {
+      setSubmitError(new Error("Repo URL is required"))
+      return
+    }
+
+    try {
+      setSubmittingJobId(jobId)
+      setSubmitMessage(null)
+      setSubmitError(null)
+
+      const result = await applyToJob({
+        uuid: candidate.uuid,
+        jobId,
+        candidateId: candidate.candidateId,
+        repoUrl: repoUrl.trim(),
+      })
+
+      if (result?.ok) {
+        setSubmitMessage("Application submitted successfully")
+      } else {
+        setSubmitError(new Error("Failed to submit application"))
+      }
+    } catch (err) {
+      setSubmitError(err)
+    } finally {
+      setSubmittingJobId(null)
+    }
+  }
+
+  if (loading) return <div className="container">Please wait a moment...</div>
+  if (error) return <div className="container error">Error: {error.message}</div>
 
   return (
-    <>
-      <div>
-        <a href="https://vite.dev" target="_blank">
-          <img src={viteLogo} className="logo" alt="Vite logo" />
-        </a>
-        <a href="https://react.dev" target="_blank">
-          <img src={reactLogo} className="logo react" alt="React logo" />
-        </a>
-      </div>
-      <h1>Vite + React</h1>
-      <div className="card">
-        <button onClick={() => setCount((count) => count + 1)}>
-          count is {count}
-        </button>
-        <p>
-          Edit <code>src/App.jsx</code> and save to test HMR
-        </p>
-      </div>
-      <p className="read-the-docs">
-        Click on the Vite and React logos to learn more
-      </p>
-    </>
+    <div className="container">
+      <header>
+        <h1>Available Positions</h1>
+        {candidate && (
+          <p>
+            Hello, <strong>{candidate.firstName} {candidate.lastName}</strong>!
+          </p>
+        )}
+        {submitMessage && <div className="notice">{submitMessage}</div>}
+        {submitError && <div className="notice error">{submitError.message}</div>}
+      </header>
+      <main>
+        <JobList jobs={jobs} onApply={handleApply} submittingJobId={submittingJobId} />
+      </main>
+    </div>
   )
 }
 
