@@ -61,6 +61,7 @@ function App() {
         uuid: candidate.uuid,
         jobId,
         candidateId: candidate.candidateId,
+        applicationId: candidate.applicationId,
         repoUrl: repoUrl.trim(),
       })
 
